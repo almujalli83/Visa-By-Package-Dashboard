@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MTOTAeVisa - Operational Performance Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#121a2b; --panel-2:#172238; --line:#22304d;
+    --text:#e6ecf5; --muted:#94a3b8; --accent:#3b82f6; --accent-2:#22d3ee;
+    --ok:#10b981; --warn:#f59e0b; --bad:#ef4444; --info:#8b5cf6;
+    --shadow: 0 6px 18px rgba(0,0,0,0.35);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:18px 24px;background:linear-gradient(180deg,#0f1a31,#0b1220);
+    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5
+  }
+  header .brand{display:flex;align-items:center;gap:12px}
+  header .brand .logo{
+    width:38px;height:38px;border-radius:10px;
+    background:linear-gradient(135deg,#3b82f6,#22d3ee);
+    display:flex;align-items:center;justify-content:center;font-weight:700;color:#0b1220
+  }
+  header h1{font-size:18px;margin:0;letter-spacing:.2px}
+  header .sub{color:var(--muted);font-size:12px;margin-top:2px}
+  .filters{display:flex;align-items:center;gap:10px}
+  .filters select,.filters button{
+    background:var(--panel-2);color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer
+  }
+  .filters button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{padding:20px 24px 60px;max-width:1600px;margin:0 auto}
+  .kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
+  .kpi{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden
+  }
+  .kpi .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.6px}
+  .kpi .value{font-size:26px;font-weight:700;margin-top:6px}
+  .kpi .delta{font-size:12px;margin-top:6px}
+  .kpi .delta.up{color:var(--ok)}
+  .kpi .delta.down{color:var(--bad)}
+  .kpi .icon{
+    position:absolute;right:12px;top:12px;width:32px;height:32px;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;font-size:14px;
+    background:rgba(59,130,246,0.15);color:var(--accent)
+  }
+  .row{display:grid;gap:14px;margin-top:14px}
+  .row.r2{grid-template-columns:1fr 1fr}
+  .row.r3{grid-template-columns:1.1fr 1fr 1fr}
+  .row.r-tab{grid-template-columns:1.4fr 1fr}
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px;box-shadow:var(--shadow);min-height:260px
+  }
+  .card h3{margin:0 0 10px 0;font-size:14px;color:#cbd5e1;letter-spacing:.3px}
+  .card h3 small{color:var(--muted);font-weight:400;margin-left:6px;font-size:11px}
+  .card .body{position:relative;height:280px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  tr:hover td{background:rgba(34,211,238,0.04)}
+  .pill{display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600}
+  .pill.ok{background:rgba(16,185,129,.15);color:var(--ok)}
+  .pill.warn{background:rgba(245,158,11,.18);color:var(--warn)}
+  .pill.bad{background:rgba(239,68,68,.15);color:var(--bad)}
+  .pill.info{background:rgba(139,92,246,.18);color:var(--info)}
+  .legend-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .source{
+    margin-top:8px;font-size:11px;color:var(--muted);
+    background:#0f1729;border:1px dashed var(--line);border-radius:8px;padding:6px 8px;
+    font-family:ui-monospace,Menlo,Consolas,monospace;line-height:1.45
+  }
+  .footer{margin-top:24px;color:var(--muted);font-size:12px;text-align:center}
+  @media (max-width:1200px){
+    .kpis{grid-template-columns:repeat(3,1fr)}
+    .row.r2,.row.r3,.row.r-tab{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">eV</div>
+    <div>
+      <h1>MTOTAeVisa &mdash; Operational Performance Dashboard</h1>
+      <div class="sub">OTAEVisa_ESB &middot; OTAEVisa_App_Attachments &middot; OTAEVisa_ESB_Logs</div>
+    </div>
+  </div>
+  <div class="filters">
+    <select id="rangeSel">
+      <option value="today" selected>Today</option>
+      <option value="7d">Last 7 days</option>
+      <option value="30d">Last 30 days</option>
+    </select>
+    <select id="dmcSel">
+      <option value="all" selected>All DMCs</option>
+    </select>
+    <select id="apiSel">
+      <option value="all" selected>All APIs</option>
+    </select>
+    <button class="primary" onclick="renderAll()">Refresh</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- KPI ROW -->
+  <section class="kpis" id="kpis"></section>
+
+  <!-- ROW 1: Application status + Hourly volume -->
+  <section class="row r2">
+    <div class="card">
+      <h3>Application Status Distribution <small>OTA_APPLICATION_PROCESSING_STG.APP_STATUS</small></h3>
+      <div class="body"><canvas id="chartStatus"></canvas></div>
+      <div class="source">
+        SELECT APP_STATUS, COUNT(*) FROM OTA_APPLICATION_PROCESSING_STG
+        WHERE CREATEDTIMESTAMP &gt;= @from GROUP BY APP_STATUS;
+      </div>
+    </div>
+    <div class="card">
+      <h3>Hourly Application Volume <small>last 24h</small></h3>
+      <div class="body"><canvas id="chartHourly"></canvas></div>
+      <div class="source">
+        SELECT DATEPART(HOUR, CREATEDTIMESTAMP) h, COUNT(*) FROM OTA_APPLICATION_PROCESSING_STG
+        WHERE CREATEDTIMESTAMP &gt;= DATEADD(HOUR,-24,GETDATE()) GROUP BY DATEPART(HOUR, CREATEDTIMESTAMP);
+      </div>
+    </div>
+  </section>
+
+  <!-- ROW 2: Latency + Errors -->
+  <section class="row r2">
+    <div class="card">
+      <h3>API Latency by Endpoint <small>P50 / P95 / P99 in ms &middot; TRANSACTIONLOG.LATENCY_MS</small></h3>
+      <div class="body"><canvas id="chartLatency"></canvas></div>
+      <div class="source">
+        SELECT a.APINAME,
+          PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY t.LATENCY_MS) OVER (PARTITION BY a.APINAME) AS p50,
+          PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY t.LATENCY_MS) OVER (PARTITION BY a.APINAME) AS p95,
+          PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY t.LATENCY_MS) OVER (PARTITION BY a.APINAME) AS p99
+        FROM OTAEVisa_ESB_Logs.dbo.TRANSACTIONLOG t JOIN API a ON a.APIID=t.APIID
+        WHERE t.CREATEDTIMESTAMP &gt;= @from;
+      </div>
+    </div>
+    <div class="card">
+      <h3>Top Error Codes <small>TRANSACTIONLOG.ERRORCODE</small></h3>
+      <div class="body"><canvas id="chartErrors"></canvas></div>
+      <div class="source">
+        SELECT TOP 10 ERRORCODE, COUNT(*) c FROM TRANSACTIONLOG
+        WHERE HTTP_STATUS &gt;= 400 AND CREATEDTIMESTAMP &gt;= @from
+        GROUP BY ERRORCODE ORDER BY c DESC;
+      </div>
+    </div>
+  </section>
+
+  <!-- ROW 3: DMC throughput + Pass/Fail trend -->
+  <section class="row r2">
+    <div class="card">
+      <h3>Top DMCs by Package Volume <small>PACKAGE_MASTER &middot; DMC</small></h3>
+      <div class="body"><canvas id="chartDmc"></canvas></div>
+      <div class="source">
+        SELECT TOP 10 d.DMC_NAME_EN, COUNT(p.PACKAGE_ID) packages, SUM(p.TOTAL_RECORDS) records
+        FROM PACKAGE_MASTER p JOIN DMC d ON d.DMC_RECORDID = p.DMC_RECORDID
+        WHERE p.CREATEDTIMESTAMP &gt;= @from GROUP BY d.DMC_NAME_EN ORDER BY packages DESC;
+      </div>
+    </div>
+    <div class="card">
+      <h3>Pass vs Fail Records <small>PACKAGE_MASTER.TOTAL_PASSED_RECORDS / TOTAL_FAILED_RECORDS</small></h3>
+      <div class="body"><canvas id="chartPassFail"></canvas></div>
+      <div class="source">
+        SELECT CAST(CREATEDTIMESTAMP AS date) d, SUM(TOTAL_PASSED_RECORDS) passed, SUM(TOTAL_FAILED_RECORDS) failed
+        FROM PACKAGE_MASTER WHERE CREATEDTIMESTAMP &gt;= DATEADD(DAY,-13,GETDATE())
+        GROUP BY CAST(CREATEDTIMESTAMP AS date) ORDER BY d;
+      </div>
+    </div>
+  </section>
+
+  <!-- ROW 4: Auth + Visa channel -->
+  <section class="row r3">
+    <div class="card">
+      <h3>OTA Authentication <small>OTA_ACCESS_LOG.LOGIN_STATUS</small></h3>
+      <div class="body"><canvas id="chartAuth"></canvas></div>
+      <div class="source">
+        SELECT LOGIN_STATUS, COUNT(*) FROM OTA_ACCESS_LOG
+        WHERE CREATEDTIMESTAMP &gt;= @from GROUP BY LOGIN_STATUS;
+      </div>
+    </div>
+    <div class="card">
+      <h3>Visa Issuing Channel <small>VISA_APP_MOFA.VISA_ISSUING_CHANNEL</small></h3>
+      <div class="body"><canvas id="chartChannel"></canvas></div>
+      <div class="source">
+        SELECT VISA_ISSUING_CHANNEL, COUNT(*) FROM VISA_APP_MOFA
+        WHERE VISA_ISSUANCE_STATUS = 1 AND VISA_ISSUANCE_TIMESTAMP &gt;= @from
+        GROUP BY VISA_ISSUING_CHANNEL;
+      </div>
+    </div>
+    <div class="card">
+      <h3>Payment Status <small>TOURISM_PACKAGE_PAYMENT_REQUEST/CONFIRMATION</small></h3>
+      <div class="body"><canvas id="chartPay"></canvas></div>
+      <div class="source">
+        SELECT pm.FEES_PAYMENT_STATUS, COUNT(*) packages, SUM(pm.TOTAL_PACKAGE_PRICE) value
+        FROM PACKAGE_MASTER pm WHERE pm.CREATEDTIMESTAMP &gt;= @from GROUP BY pm.FEES_PAYMENT_STATUS;
+      </div>
+    </div>
+  </section>
+
+  <!-- ROW 5: Tables -->
+  <section class="row r-tab">
+    <div class="card">
+      <h3>Recent Failed Transactions <small>HTTP_STATUS &ge; 400</small></h3>
+      <div style="overflow:auto;max-height:340px">
+        <table id="tblFailures">
+          <thead><tr>
+            <th>Time</th><th>API</th><th>DMC</th><th>App No.</th><th>HTTP</th><th>Latency</th><th>Error</th><th>Retries</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="source">
+        SELECT TOP 20 t.CREATEDTIMESTAMP, a.APINAME, d.DMC_NAME_EN, t.APPLICATION_NO,
+               t.HTTP_STATUS, t.LATENCY_MS, t.ERRORCODE, l.RETRY_COUNT
+        FROM TRANSACTIONLOG t LEFT JOIN API a ON a.APIID=t.APIID
+        LEFT JOIN DMC d ON d.DMC_RECORDID=t.DMC_RECORDID
+        LEFT JOIN OTA_TOURISMPACKAGELOG l ON l.PACKAGE_ID=t.PACKAGE_ID
+        WHERE t.HTTP_STATUS &gt;= 400 ORDER BY t.CREATEDTIMESTAMP DESC;
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>DMC Performance Leaderboard <small>last 7d</small></h3>
+      <div style="overflow:auto;max-height:340px">
+        <table id="tblDmc">
+          <thead><tr>
+            <th>DMC</th><th>Packages</th><th>Apps</th><th>Pass %</th><th>Avg Latency</th><th>Status</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="source">
+        SELECT d.DMC_NAME_EN, COUNT(p.PACKAGE_ID) pkgs, SUM(p.TOTAL_RECORDS) apps,
+               1.0*SUM(p.TOTAL_PASSED_RECORDS)/NULLIF(SUM(p.TOTAL_RECORDS),0) pass_rate,
+               AVG(t.LATENCY_MS) avg_latency
+        FROM PACKAGE_MASTER p JOIN DMC d ON d.DMC_RECORDID=p.DMC_RECORDID
+        LEFT JOIN TRANSACTIONLOG t ON t.PACKAGE_ID=p.PACKAGE_ID
+        WHERE p.CREATEDTIMESTAMP &gt;= DATEADD(DAY,-7,GETDATE())
+        GROUP BY d.DMC_NAME_EN ORDER BY apps DESC;
+      </div>
+    </div>
+  </section>
+
+  <div class="footer">
+    Data model: <code>MTOTAeVisa_DatabaseDetails.xlsx</code> &middot;
+    Tile values shown below are illustrative (mock) until wired to live SQL Server. Production queries are documented inline and in <code>sql/operational_dashboard_queries.sql</code>.
+  </div>
+</main>
+
+<script>
+/* ---------- Mock dataset (shape mirrors the schema) ---------- */
+const COLORS = {
+  ok:'#10b981', warn:'#f59e0b', bad:'#ef4444', info:'#8b5cf6',
+  blue:'#3b82f6', cyan:'#22d3ee', pink:'#ec4899', grey:'#64748b'
+};
+const APIs = ['CreatePackage','ValidatePackage','SubmitMOFA','PayFees','PullAttachment','VirusScan','IssueVisa','CancelVisa'];
+const DMCS = ['Al Tayyar Travel','SeeraGroup','Almosafer','Tajawal Tours','Discover Hajj','Riyadh Holidays','Madinah Excursions','Jeddah Voyages','RotanaTours','Khalili DMC'];
+const STATUSES = ['SUBMITTED','VALIDATED','APPROVED','REJECTED','PENDING','CANCELLED'];
+const ERRCODES = ['MOFA_ERR_409','PASSPORT_INVALID','BIO_MISMATCH','DUP_APP','PAYMENT_DECLINED','TIMEOUT_504','NET_503','SCAN_INFECTED','TOKEN_EXP','SCHEMA_FAIL'];
+
+function rand(min,max){return Math.floor(Math.random()*(max-min+1))+min}
+function pick(a){return a[Math.floor(Math.random()*a.length)]}
+
+// Populate filter dropdowns
+document.getElementById('dmcSel').insertAdjacentHTML('beforeend',
+  DMCS.map(d=>`<option>${d}</option>`).join(''));
+document.getElementById('apiSel').insertAdjacentHTML('beforeend',
+  APIs.map(a=>`<option>${a}</option>`).join(''));
+
+/* ---------- KPI tiles ---------- */
+function renderKpis(){
+  const totalPkgs = rand(180,260);
+  const totalApps = rand(900,1400);
+  const successRate = (rand(8800,9600)/100).toFixed(1);
+  const avgLatency = rand(280,520);
+  const activeDmcs = rand(38,55);
+  const inProgress = rand(40,90);
+  const cancellations = rand(2,18);
+
+  const cards = [
+    {label:'Packages Today', value:totalPkgs, delta:'+'+rand(2,15)+'% vs yesterday', cls:'up', icon:'P'},
+    {label:'Applications Today', value:totalApps.toLocaleString(), delta:'+'+rand(1,12)+'% vs yesterday', cls:'up', icon:'A'},
+    {label:'Visa Success Rate', value:successRate+'%', delta:(Math.random()>0.5?'+':'-')+(Math.random()*1).toFixed(2)+' pts', cls:'up', icon:'V'},
+    {label:'Avg API Latency', value:avgLatency+' ms', delta:(Math.random()>0.5?'-':'+')+rand(2,30)+' ms', cls:Math.random()>0.5?'up':'down', icon:'L'},
+    {label:'Active DMCs', value:activeDmcs, delta:'of '+DMCS.length+' onboarded', cls:'up', icon:'D'},
+    {label:'In-Progress Pkgs', value:inProgress, delta:cancellations+' cancellations', cls:cancellations>10?'down':'up', icon:'I'},
+  ];
+  document.getElementById('kpis').innerHTML = cards.map(c => `
+    <div class="kpi">
+      <div class="icon">${c.icon}</div>
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div class="delta ${c.cls}">${c.delta}</div>
+    </div>`).join('');
+}
+
+/* ---------- Charts ---------- */
+let charts = {};
+function makeChart(id, cfg){
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, cfg);
+}
+
+const baseOpts = {
+  responsive:true, maintainAspectRatio:false,
+  plugins:{ legend:{ labels:{color:'#cbd5e1', font:{size:11}} } },
+  scales:{
+    x:{ ticks:{color:'#94a3b8'}, grid:{color:'rgba(148,163,184,0.08)'} },
+    y:{ ticks:{color:'#94a3b8'}, grid:{color:'rgba(148,163,184,0.08)'}, beginAtZero:true }
+  }
+};
+
+function renderCharts(){
+  /* Status donut */
+  makeChart('chartStatus',{
+    type:'doughnut',
+    data:{labels:STATUSES, datasets:[{
+      data: STATUSES.map(()=>rand(80,400)),
+      backgroundColor:[COLORS.blue,COLORS.cyan,COLORS.ok,COLORS.bad,COLORS.warn,COLORS.grey],
+      borderWidth:0
+    }]},
+    options:{...baseOpts, scales:{}, cutout:'62%'}
+  });
+
+  /* Hourly */
+  const hours = Array.from({length:24},(_,i)=>`${i}:00`);
+  makeChart('chartHourly',{
+    type:'line',
+    data:{labels:hours, datasets:[
+      {label:'Apps Submitted', data:hours.map(()=>rand(20,140)), borderColor:COLORS.cyan, backgroundColor:'rgba(34,211,238,0.15)', fill:true, tension:.35},
+      {label:'Visa Issued', data:hours.map(()=>rand(10,110)), borderColor:COLORS.ok, backgroundColor:'rgba(16,185,129,0.12)', fill:true, tension:.35}
+    ]},
+    options:baseOpts
+  });
+
+  /* Latency stacked-bars per API */
+  makeChart('chartLatency',{
+    type:'bar',
+    data:{labels:APIs, datasets:[
+      {label:'P50', data:APIs.map(()=>rand(80,250)), backgroundColor:COLORS.blue},
+      {label:'P95', data:APIs.map(()=>rand(300,700)), backgroundColor:COLORS.warn},
+      {label:'P99', data:APIs.map(()=>rand(700,1500)), backgroundColor:COLORS.bad}
+    ]},
+    options:baseOpts
+  });
+
+  /* Top errors */
+  const errs = ERRCODES.map(e=>({e, c:rand(5,180)})).sort((a,b)=>b.c-a.c);
+  makeChart('chartErrors',{
+    type:'bar',
+    data:{labels:errs.map(x=>x.e), datasets:[{label:'Occurrences', data:errs.map(x=>x.c), backgroundColor:COLORS.bad}]},
+    options:{...baseOpts, indexAxis:'y'}
+  });
+
+  /* Top DMCs */
+  const dmcs = DMCS.map(d=>({d, p:rand(8,60), r:rand(40,400)})).sort((a,b)=>b.p-a.p).slice(0,10);
+  makeChart('chartDmc',{
+    type:'bar',
+    data:{labels:dmcs.map(x=>x.d), datasets:[
+      {label:'Packages', data:dmcs.map(x=>x.p), backgroundColor:COLORS.blue},
+      {label:'Records', data:dmcs.map(x=>x.r), backgroundColor:COLORS.cyan}
+    ]},
+    options:{...baseOpts, indexAxis:'y'}
+  });
+
+  /* Pass/Fail trend (14d) */
+  const days = Array.from({length:14},(_,i)=>{
+    const d = new Date(); d.setDate(d.getDate()-(13-i));
+    return d.toISOString().slice(5,10);
+  });
+  makeChart('chartPassFail',{
+    type:'bar',
+    data:{labels:days, datasets:[
+      {label:'Passed', data:days.map(()=>rand(180,700)), backgroundColor:COLORS.ok, stack:'s'},
+      {label:'Failed', data:days.map(()=>rand(10,90)),  backgroundColor:COLORS.bad, stack:'s'}
+    ]},
+    options:{...baseOpts, scales:{...baseOpts.scales, x:{...baseOpts.scales.x, stacked:true}, y:{...baseOpts.scales.y, stacked:true}}}
+  });
+
+  /* Auth */
+  makeChart('chartAuth',{
+    type:'doughnut',
+    data:{labels:['SUCCESS','FAILED','LOCKED'], datasets:[{
+      data:[rand(800,1500), rand(20,180), rand(0,15)],
+      backgroundColor:[COLORS.ok,COLORS.bad,COLORS.warn], borderWidth:0
+    }]},
+    options:{...baseOpts, scales:{}, cutout:'62%'}
+  });
+
+  /* Channel */
+  makeChart('chartChannel',{
+    type:'pie',
+    data:{labels:['Direct','Mobile','OTA-API','Embassy'], datasets:[{
+      data:[rand(50,400),rand(30,300),rand(200,800),rand(5,80)],
+      backgroundColor:[COLORS.blue,COLORS.cyan,COLORS.info,COLORS.warn], borderWidth:0
+    }]},
+    options:{...baseOpts, scales:{}}
+  });
+
+  /* Payment */
+  makeChart('chartPay',{
+    type:'bar',
+    data:{labels:['PAID','PENDING','FAILED','REFUNDED'], datasets:[{
+      label:'Packages',
+      data:[rand(120,260),rand(20,80),rand(5,40),rand(0,15)],
+      backgroundColor:[COLORS.ok,COLORS.warn,COLORS.bad,COLORS.info]
+    }]},
+    options:baseOpts
+  });
+}
+
+/* ---------- Tables ---------- */
+function pillForHttp(s){
+  if (s>=500) return `<span class="pill bad">${s}</span>`;
+  if (s>=400) return `<span class="pill warn">${s}</span>`;
+  return `<span class="pill ok">${s}</span>`;
+}
+function renderTables(){
+  const failBody = document.querySelector('#tblFailures tbody');
+  const rows = [];
+  for (let i=0;i<14;i++){
+    const t = new Date(Date.now() - rand(1,360)*60000);
+    rows.push(`
+      <tr>
+        <td>${t.toLocaleTimeString()}</td>
+        <td>${pick(APIs)}</td>
+        <td>${pick(DMCS)}</td>
+        <td>${rand(100000000,999999999)}</td>
+        <td>${pillForHttp(pick([400,401,409,422,500,502,503,504]))}</td>
+        <td>${rand(120,2400)} ms</td>
+        <td><code>${pick(ERRCODES)}</code></td>
+        <td>${rand(0,4)}</td>
+      </tr>`);
+  }
+  failBody.innerHTML = rows.join('');
+
+  const dmcBody = document.querySelector('#tblDmc tbody');
+  const dmcRows = DMCS.slice().sort(()=>Math.random()-0.5).map(d=>{
+    const apps = rand(120,1800);
+    const passRate = (rand(7800,9900)/100).toFixed(1);
+    const lat = rand(180,720);
+    const status = passRate>95 ? `<span class="pill ok">Healthy</span>` :
+                   passRate>88 ? `<span class="pill warn">Watch</span>` :
+                                 `<span class="pill bad">Degraded</span>`;
+    return `<tr>
+      <td>${d}</td><td>${rand(5,90)}</td><td>${apps.toLocaleString()}</td>
+      <td>${passRate}%</td><td>${lat} ms</td><td>${status}</td>
+    </tr>`;
+  }).join('');
+  dmcBody.innerHTML = dmcRows;
+}
+
+/* ---------- Render ---------- */
+function renderAll(){
+  renderKpis();
+  renderCharts();
+  renderTables();
+}
+renderAll();
+</script>
+</body>
+</html>
